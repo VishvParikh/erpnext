@@ -122,24 +122,57 @@ class TestMaintenanceVisit(unittest.TestCase):
 		mv2.customer = "_Test Customer"
 		mv2.mntc_date = today()
 		mv2.completion_status = "Partially Completed"
+		sales_person = make_sales_person("Dwight Schrute")
+
+		mv2.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name
+			},
+		)
 		mv2.insert(ignore_if_duplicate=True,ignore_permissions=True)
 		with self.assertRaises(frappe.ValidationError, msg="Add Items in the Purpose Table"):
 			mv2.validate_purpose_table()
 
 
 	def test_validate_maintenance_date_TC_M_019(self):
+		ms = frappe.new_doc("Maintenance Schedule")
+		ms.company = "_Test Company"
+		ms.customer = "_Test Customer"
+		ms.transaction_date = today()
+
+		ms.append(
+			"items",
+			{
+				"item_code": "_Test Item",
+				"start_date": "2025-10-01",
+				"end_date": "2025-10-10",
+				"periodicity": "Weekly",
+				"no_of_visits": 1,
+				"sales_person": "Sales Team",
+			},
+		)
+		ms.insert(ignore_permissions=True)
 		# Step 1: Create a Maintenance Schedule Item with a valid date range
-		schedule_item = frappe.get_doc({
-			"doctype": "Maintenance Schedule Item",
-			"item_code": "_Test Item",
-			"start_date": "2025-10-01",
-			"end_date": "2025-10-10"
-		}).insert(ignore_if_duplicate=True,ignore_permissions=True)
+		# schedule_item = frappe.get_doc({
+		# 	"doctype": "Maintenance Schedule Item",
+		# 	"item_code": "_Test Item",
+		# 	"start_date": "2025-10-01",
+		# 	"end_date": "2025-10-10"
+		# 	"no_of_visits": 1
+		# }).insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		# Step 2: Create a Maintenance Schedule Detail linked to the above item
 		schedule_detail = frappe.get_doc({
 			"doctype": "Maintenance Schedule Detail",
-			"item_reference": schedule_item.name,
+			"item_reference": ms.items[0].name,
+			"scheduled_date": "2025-10-04",
+			"parent": ms.name,
+			"parenttype": "Maintenance Schedule",
 		}).insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		# ✅ CASE 1 — Valid maintenance date (within range)
@@ -147,6 +180,21 @@ class TestMaintenanceVisit(unittest.TestCase):
 		valid_doc.maintenance_type = "Scheduled"
 		valid_doc.maintenance_schedule_detail = schedule_detail.name
 		valid_doc.mntc_date = "2025-10-05"
+		valid_doc.company = "_Test Company"
+		valid_doc.customer = "_Test Customer"
+		valid_doc.completion_status = "Partially Completed"
+		sales_person = make_sales_person("Dwight Schrute")
+		valid_doc.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name
+			},
+		)
+		valid_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		try:
 			valid_doc.validate_maintenance_date()  # Should NOT raise any error
@@ -158,6 +206,20 @@ class TestMaintenanceVisit(unittest.TestCase):
 		invalid_doc_before.maintenance_type = "Scheduled"
 		invalid_doc_before.maintenance_schedule_detail = schedule_detail.name
 		invalid_doc_before.mntc_date = "2025-09-30"
+		invalid_doc_before.company = "_Test Company"
+		invalid_doc_before.customer = "_Test Customer"
+		invalid_doc_before.completion_status = "Partially Completed"
+		invalid_doc_before.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name
+			},
+		)
+		invalid_doc_before.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		with self.assertRaises(frappe.ValidationError, msg="Date before start_date should fail"):
 			invalid_doc_before.validate_maintenance_date()
@@ -167,10 +229,154 @@ class TestMaintenanceVisit(unittest.TestCase):
 		invalid_doc_after.maintenance_type = "Scheduled"
 		invalid_doc_after.maintenance_schedule_detail = schedule_detail.name
 		invalid_doc_after.mntc_date = "2025-10-15"
+		invalid_doc_after.company = "_Test Company"
+		invalid_doc_after.customer = "_Test Customer"
+		invalid_doc_after.completion_status = "Partially Completed"
+		invalid_doc_after.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name
+			},
+		)
+		invalid_doc_after.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		with self.assertRaises(frappe.ValidationError, msg="Date after end_date should fail"):
 			invalid_doc_after.validate_maintenance_date()
 
+	def test_update_status_and_actual_date_direct_TC_M_020(self):
+		ms = frappe.new_doc("Maintenance Schedule")
+		ms.company = "_Test Company"
+		ms.customer = "_Test Customer"
+		ms.transaction_date = today()
+
+		ms.append(
+			"items",
+			{
+				"item_code": "_Test Item",
+				"start_date": "2025-10-01",
+				"end_date": "2025-10-10",
+				"periodicity": "Weekly",
+				"no_of_visits": 1,
+				"sales_person": "Sales Team",
+			},
+		)
+		ms.insert(ignore_permissions=True)
+		schedule_detail = frappe.get_doc({
+			"doctype": "Maintenance Schedule Detail",
+			"item_reference": ms.items[0].name,
+			"scheduled_date": "2025-10-04",
+			"completion_status": "Pending",
+			"parent": ms.name,
+			"parenttype": "Maintenance Schedule",
+			"actual_date": None,
+		}).insert(ignore_if_duplicate=True,ignore_permissions=True)
+
+		valid_doc = frappe.new_doc("Maintenance Visit")  # 🔹 Replace with actual doctype if different
+		valid_doc.maintenance_type = "Scheduled"
+		valid_doc.maintenance_schedule_detail = schedule_detail.name
+		valid_doc.mntc_date = "2025-10-05"
+		valid_doc.company = "_Test Company"
+		valid_doc.customer = "_Test Customer"
+		valid_doc.completion_status = "Partially Completed"
+		sales_person = make_sales_person("Dwight Schrute")
+		valid_doc.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name
+			},
+		)
+		valid_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
+		valid_doc.mntc_visit.update_status_and_actual_date()
+
+		updated = frappe.db.get_value(
+			"Maintenance Schedule Detail",
+			schedule_detail.name,
+			["completion_status", "actual_date"],
+			as_dict=True,
+		)
+
+		updated.assertEqual(updated.completion_status, "Partially Completed")
+		updated.assertEqual(str(updated.actual_date), "2025-10-05")
+
+		"""Test when cancel=True (should reset status and actual_date)"""
+		valid_doc.mntc_visit.update_status_and_actual_date(cancel=True)
+
+		cancel_updated = frappe.db.get_value(
+			"Maintenance Schedule Detail",
+			self.schedule_detail.name,
+			["completion_status", "actual_date"],
+			as_dict=True,
+		)
+
+		cancel_updated.assertEqual(cancel_updated.completion_status, "Pending")
+		cancel_updated.assertIsNone(cancel_updated.actual_date)
+
+		purposes_doc = frappe.new_doc("Maintenance Visit")  # 🔹 Replace with actual doctype if different
+		purposes_doc.maintenance_type = "Scheduled"
+		purposes_doc.mntc_date = "2025-10-05"
+		purposes_doc.company = "_Test Company"
+		purposes_doc.customer = "_Test Customer"
+		purposes_doc.completion_status = "Partially Completed"
+		purposes_doc.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name,
+				"maintenance_schedule_detail": schedule_detail.name
+			},
+		)
+		purposes_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
+
+		purposes_doc.mntc_visit.update_status_and_actual_date()
+
+		updated_2 = frappe.db.get_value(
+			"Maintenance Schedule Detail",
+			schedule_detail2.name,
+			["completion_status", "actual_date"],
+			as_dict=True,
+		)
+
+		updated_2.assertEqual(updated_2.completion_status, "Completed")
+		updated_2.assertEqual(str(updated_2.actual_date), "2025-10-05")
+
+	def test_check_if_last_visit_raises_error_for_later_visit_TC_M_021(self):
+	"""Should throw error if a later Maintenance Visit exists for same sales order"""
+	# Create a later visit with same prevdoc_docname and docstatus=1
+	later_visit = frappe.get_doc({
+		"doctype": "Maintenance Visit",
+		"mntc_date": "2025-10-11",
+		"company": "_Test Company",
+		"customer": "_Test Customer",
+		"mntc_time": "09:00:00",
+		"docstatus": 1,
+	}).insert(ignore_if_duplicate=True)
+	sales_person = make_sales_person("Dwight Schrute")
+	sales_order = frappe.db.get_value("Sales Order",{"docstatus": 1},"name")
+	later_visit.append("purposes", {
+		"item_code": "_Test Item",
+		"sales_person": "Sales Team",
+		"description": "Test Item",
+		"work_done": "Test Work Done",
+		"service_person": sales_person.name,
+		"prevdoc_doctype": "Sales Order",
+		"prevdoc_docname": sales_order,
+	})
+	later_visit.save(ignore_permissions=True)
+
+	# Run and expect frappe.throw to trigger
+	with self.assertRaises(frappe.ValidationError):
+		later_visit.check_if_last_visit()
 
 	def test_validate_serial_no_TC_M_017(self):
 		mv1 = make_maintenance_visit()
