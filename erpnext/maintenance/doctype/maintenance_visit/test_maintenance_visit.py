@@ -353,30 +353,30 @@ class TestMaintenanceVisit(unittest.TestCase):
 	def test_check_if_last_visit_raises_error_for_later_visit_TC_M_021(self):
 	"""Should throw error if a later Maintenance Visit exists for same sales order"""
 	# Create a later visit with same prevdoc_docname and docstatus=1
-	later_visit = frappe.get_doc({
-		"doctype": "Maintenance Visit",
-		"mntc_date": "2025-10-11",
-		"company": "_Test Company",
-		"customer": "_Test Customer",
-		"mntc_time": "09:00:00",
-		"docstatus": 1,
-	}).insert(ignore_if_duplicate=True)
-	sales_person = make_sales_person("Dwight Schrute")
-	sales_order = frappe.db.get_value("Sales Order",{"docstatus": 1},"name")
-	later_visit.append("purposes", {
-		"item_code": "_Test Item",
-		"sales_person": "Sales Team",
-		"description": "Test Item",
-		"work_done": "Test Work Done",
-		"service_person": sales_person.name,
-		"prevdoc_doctype": "Sales Order",
-		"prevdoc_docname": sales_order,
-	})
-	later_visit.save(ignore_permissions=True)
+		later_visit = frappe.get_doc({
+			"doctype": "Maintenance Visit",
+			"mntc_date": "2025-10-11",
+			"company": "_Test Company",
+			"customer": "_Test Customer",
+			"mntc_time": "09:00:00",
+			"docstatus": 1,
+		}).insert(ignore_if_duplicate=True)
+		sales_person = make_sales_person("Dwight Schrute")
+		sales_order = frappe.db.get_value("Sales Order",{"docstatus": 1},"name")
+		later_visit.append("purposes", {
+			"item_code": "_Test Item",
+			"sales_person": "Sales Team",
+			"description": "Test Item",
+			"work_done": "Test Work Done",
+			"service_person": sales_person.name,
+			"prevdoc_doctype": "Sales Order",
+			"prevdoc_docname": sales_order,
+		})
+		later_visit.save(ignore_permissions=True)
 
-	# Run and expect frappe.throw to trigger
-	with self.assertRaises(frappe.ValidationError):
-		later_visit.check_if_last_visit()
+		# Run and expect frappe.throw to trigger
+		with self.assertRaises(frappe.ValidationError):
+			later_visit.check_if_last_visit()
 
 	def test_validate_serial_no_TC_M_017(self):
 		mv1 = make_maintenance_visit()
