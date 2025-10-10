@@ -351,8 +351,8 @@ class TestMaintenanceVisit(unittest.TestCase):
 		updated_2.assertEqual(str(updated_2.actual_date), "2025-10-05")
 
 	def test_check_if_last_visit_raises_error_for_later_visit_TC_M_021(self):
-	"""Should throw error if a later Maintenance Visit exists for same sales order"""
-	# Create a later visit with same prevdoc_docname and docstatus=1
+		"""Should throw error if a later Maintenance Visit exists for same sales order"""
+		# Create a later visit with same prevdoc_docname and docstatus=1
 		later_visit = frappe.get_doc({
 			"doctype": "Maintenance Visit",
 			"mntc_date": "2025-10-11",
