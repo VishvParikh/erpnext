@@ -118,8 +118,13 @@ jobs:
           python <<EOF
           import xmltodict
           import pandas as pd
+          import os
           # Read XML File
           xml_file = "/home/runner/frappe-bench/test_results.xml"
+          if not os.path.exists(xml_file):
+              raise FileNotFoundError(f"XML file not found: {xml_file}")
+          if os.path.getsize(xml_file) == 0:
+              raise ValueError(f"XML file {xml_file} is empty. No test results to parse.")
           with open(xml_file, 'r', encoding='utf-8') as file:
               xml_content = file.read()
           data = xmltodict.parse(xml_content)
