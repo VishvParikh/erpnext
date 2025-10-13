@@ -535,6 +535,7 @@ def make_sales_person(name):
 		"sales_person_name": name
 	})
 	sales_person.insert(ignore_if_duplicate=True)
+	frappe.db.commit()
 	return sales_person
 
 def make_serial_no(item_code):
