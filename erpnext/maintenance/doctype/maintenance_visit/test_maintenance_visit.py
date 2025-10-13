@@ -18,7 +18,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 		self.customer = create_customer("_Test Customer", currency="INR")
 		self.item_code = create_item("_Test Item", is_stock_item=1)
 		self.company = "_Test Company"
-		self.sales_person = self.make_sales_person("_Test Sales Person")
+		self.sales_person = make_sales_person("_Test Sales Person")
 
 	def tearDown(self):
 		frappe.db.rollback()
