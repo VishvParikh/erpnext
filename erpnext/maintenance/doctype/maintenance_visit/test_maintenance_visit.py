@@ -360,7 +360,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 			"customer": "_Test Customer",
 			"mntc_time": "09:00:00",
 			"docstatus": 1,
-		}).insert(ignore_if_duplicate=True)
+		})
 		sales_person = make_sales_person("Dwight Schrute")
 		sales_order = frappe.db.get_value("Sales Order",{"docstatus": 1},"name")
 		later_visit.append("purposes", {
@@ -372,6 +372,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 			"prevdoc_doctype": "Sales Order",
 			"prevdoc_docname": sales_order,
 		})
+		later_visit.insert(ignore_if_duplicate=True)
 		later_visit.save(ignore_permissions=True)
 
 		# Run and expect frappe.throw to trigger
@@ -535,6 +536,7 @@ def make_sales_person(name):
 		"sales_person_name": name
 	})
 	sales_person.insert(ignore_if_duplicate=True)
+	sales_person.save(ignore_permissions=True)
 	frappe.db.commit()
 	return sales_person
 
