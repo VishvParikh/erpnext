@@ -289,21 +289,21 @@ class TestMaintenanceVisit(unittest.TestCase):
 			as_dict=True,
 		)
 
-		updated.assertEqual(updated.completion_status, "Partially Completed")
-		updated.assertEqual(str(updated.actual_date), "2025-10-05")
+		self.assertEqual(updated.completion_status, "Partially Completed")
+		self.assertEqual(str(updated.actual_date), "2025-10-05")
 
 		"""Test when cancel=True (should reset status and actual_date)"""
 		valid_doc.update_status_and_actual_date(cancel=True)
 
 		cancel_updated = frappe.db.get_value(
 			"Maintenance Schedule Detail",
-			self.schedule_detail.name,
+			schedule_detail.name,
 			["completion_status", "actual_date"],
 			as_dict=True,
 		)
 
-		cancel_updated.assertEqual(cancel_updated.completion_status, "Pending")
-		cancel_updated.assertIsNone(cancel_updated.actual_date)
+		self.assertEqual(cancel_updated.completion_status, "Pending")
+		self.assertIsNone(cancel_updated.actual_date)
 
 		purposes_doc = frappe.new_doc("Maintenance Visit")  # 🔹 Replace with actual doctype if different
 		purposes_doc.maintenance_type = "Scheduled"
@@ -333,8 +333,8 @@ class TestMaintenanceVisit(unittest.TestCase):
 			as_dict=True,
 		)
 
-		updated_2.assertEqual(updated_2.completion_status, "Completed")
-		updated_2.assertEqual(str(updated_2.actual_date), "2025-10-05")
+		self.assertEqual(updated_2.completion_status, "Completed")
+		self.assertEqual(str(updated_2.actual_date), "2025-10-05")
 
 	def test_check_if_last_visit_raises_error_for_later_visit_TC_M_021(self):
 		"""Should throw error if a later Maintenance Visit exists for same sales order"""
@@ -388,6 +388,10 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"service_person": sales_person.name
 			},
 		)
+		try:
+			mv2.validate_serial_no()
+		except Exception as e:
+			frappe.throw(f"validate_serial_no() failed unexpectedly: {e}")
 
 		with self.assertRaises(frappe.ValidationError, msg="Serial No INVALID-SERIAL-NO does not exist"):
 			mv2.validate_serial_no()
