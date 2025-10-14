@@ -134,7 +134,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"service_person": sales_person.name
 			},
 		)
-		mv2.insert(ignore_if_duplicate=True,ignore_permissions=True)
 		with self.assertRaises(frappe.ValidationError, msg="Add Items in the Purpose Table"):
 			mv2.validate_purpose_table()
 
@@ -219,7 +218,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"service_person": sales_person.name
 			},
 		)
-		invalid_doc_before.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		with self.assertRaises(frappe.ValidationError, msg="Date before start_date should fail"):
 			invalid_doc_before.validate_maintenance_date()
@@ -242,7 +240,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"service_person": sales_person.name
 			},
 		)
-		invalid_doc_after.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		with self.assertRaises(frappe.ValidationError, msg="Date after end_date should fail"):
 			invalid_doc_after.validate_maintenance_date()
@@ -294,7 +291,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 			},
 		)
 		valid_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
-		valid_doc.mntc_visit.update_status_and_actual_date()
+		valid_doc.update_status_and_actual_date()
 
 		updated = frappe.db.get_value(
 			"Maintenance Schedule Detail",
@@ -307,7 +304,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 		updated.assertEqual(str(updated.actual_date), "2025-10-05")
 
 		"""Test when cancel=True (should reset status and actual_date)"""
-		valid_doc.mntc_visit.update_status_and_actual_date(cancel=True)
+		valid_doc.update_status_and_actual_date(cancel=True)
 
 		cancel_updated = frappe.db.get_value(
 			"Maintenance Schedule Detail",
@@ -338,7 +335,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 		)
 		purposes_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
-		purposes_doc.mntc_visit.update_status_and_actual_date()
+		purposes_doc.update_status_and_actual_date()
 
 		updated_2 = frappe.db.get_value(
 			"Maintenance Schedule Detail",
@@ -359,6 +356,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 			"company": "_Test Company",
 			"customer": "_Test Customer",
 			"mntc_time": "09:00:00",
+			"completion_status":"Partially Completed",
 			"docstatus": 1,
 		})
 		sales_person = make_sales_person("Dwight Schrute")
@@ -372,9 +370,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 			"prevdoc_doctype": "Sales Order",
 			"prevdoc_docname": sales_order,
 		})
-		later_visit.insert(ignore_if_duplicate=True)
-		later_visit.save(ignore_permissions=True)
-
 		# Run and expect frappe.throw to trigger
 		with self.assertRaises(frappe.ValidationError):
 			later_visit.check_if_last_visit()
@@ -405,7 +400,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"serial_no": "INVALID-SERIAL-NO",
 			},
 		)
-		mv2.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 		with self.assertRaises(frappe.ValidationError, msg="Serial No INVALID-SERIAL-NO does not exist"):
 			mv2.validate_serial_no()
@@ -525,22 +519,29 @@ def make_maintenance_visit():
 
 	return mv
 
-
 def make_sales_person(name):
-    existing_sales_person = frappe.db.get_value("Sales Person", {"sales_person_name": name}, "name")
-    if existing_sales_person:
-        return frappe.get_doc("Sales Person", existing_sales_person)
+	existing_sales_person = frappe.db.get_value("Sales Person", {"sales_person_name": name}, "name")
+	if existing_sales_person:
+		return frappe.get_doc("Sales Person", existing_sales_person)
 
-    sales_person = frappe.get_doc({
-        "doctype": "Sales Person",
-        "sales_person_name": name
-    })
-    sales_person.insert(ignore_if_duplicate=True, ignore_permissions=True)
-    frappe.db.commit()
-    return sales_person
+	sales_person = frappe.get_doc({
+		"doctype": "Sales Person",
+		"sales_person_name": name
+	})
+	sales_person.insert(ignore_if_duplicate=True, ignore_permissions=True)
+	frappe.db.commit()
+	return sales_person
 
 def make_serial_no(item_code):
-	serial_no = frappe.get_doc({"doctype": "Serial No","item_code": item_code})
-	serial_no.insert(ignore_if_duplicate=True)
+	existing_serial_no = frappe.db.get_value("Serial No", {"item_code": item_code}, "name")
+	if existing_serial_no:
+		return frappe.get_doc("Serial No", existing_serial_no)
 
+	serial_no = frappe.get_doc({
+		"doctype": "Serial No",
+		"item_code": item_code,
+		"serial_no": "SN-_Test_Item-00002",
+	})
+	serial_no.insert(ignore_if_duplicate=True, ignore_permissions=True)
+	frappe.db.commit()
 	return serial_no
