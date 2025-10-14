@@ -240,8 +240,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"maintenance_schedule_detail": schedule_detail.name
 			},
 		)
-		purposes_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
-
 		with self.assertRaises(frappe.ValidationError, msg=" purposes Date after end_date should fail"):
 			purposes_doc.validate_maintenance_date()
 
@@ -430,15 +428,11 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"description": "Test Item",
 				"work_done": "Test Work Done",
 				"service_person": sales_person.name,
-				"serial_no": "Invalide_serial",
+				"serial_no": "FAKE-SERIAL-NO-001",
 			},
 		)
-		try:
-			mv2.validate_serial_no()
-		except Exception as e:
-			frappe.throw(f"validate_serial_no() failed unexpectedly: {e}")
-
-		with self.assertRaises(frappe.ValidationError, msg="Serial No INVALID-SERIAL-NO does not exist"):
+		
+		with self.assertRaises(ValidationError):
 			mv2.validate_serial_no()
 
 
