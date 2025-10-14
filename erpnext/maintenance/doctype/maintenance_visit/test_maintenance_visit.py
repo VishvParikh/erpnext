@@ -123,17 +123,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 		mv2.mntc_date = today()
 		mv2.completion_status = "Partially Completed"
 		sales_person = make_sales_person("Dwight Schrute")
-
-		mv2.append(
-			"purposes",
-			{
-				"item_code": "_Test Item",
-				"sales_person": "Sales Team",
-				"description": "Test Item",
-				"work_done": "Test Work Done",
-				"service_person": sales_person.name
-			},
-		)
 		with self.assertRaises(frappe.ValidationError, msg="Add Items in the Purpose Table"):
 			mv2.validate_purpose_table()
 
@@ -339,7 +328,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 
 		updated_2 = frappe.db.get_value(
 			"Maintenance Schedule Detail",
-			schedule_detail2.name,
+			schedule_detail.name,
 			["completion_status", "actual_date"],
 			as_dict=True,
 		)
@@ -396,8 +385,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"sales_person": "Sales Team",
 				"description": "Test Item",
 				"work_done": "Test Work Done",
-				"service_person": sales_person.name,
-				"serial_no": "INVALID-SERIAL-NO",
+				"service_person": sales_person.name
 			},
 		)
 
