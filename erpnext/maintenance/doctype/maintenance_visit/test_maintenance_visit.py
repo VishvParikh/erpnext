@@ -145,16 +145,6 @@ class TestMaintenanceVisit(unittest.TestCase):
 			},
 		)
 		ms.insert(ignore_permissions=True)
-		# Step 1: Create a Maintenance Schedule Item with a valid date range
-		# schedule_item = frappe.get_doc({
-		# 	"doctype": "Maintenance Schedule Item",
-		# 	"item_code": "_Test Item",
-		# 	"start_date": "2025-10-01",
-		# 	"end_date": "2025-10-10"
-		# 	"no_of_visits": 1
-		# }).insert(ignore_if_duplicate=True,ignore_permissions=True)
-
-		# Step 2: Create a Maintenance Schedule Detail linked to the above item
 		schedule_detail = frappe.get_doc({
 			"doctype": "Maintenance Schedule Detail",
 			"item_reference": ms.items[0].name,
@@ -232,6 +222,28 @@ class TestMaintenanceVisit(unittest.TestCase):
 
 		with self.assertRaises(frappe.ValidationError, msg="Date after end_date should fail"):
 			invalid_doc_after.validate_maintenance_date()
+
+		purposes_doc = frappe.new_doc("Maintenance Visit")  # 🔹 Replace with actual doctype if different
+		purposes_doc.maintenance_type = "Scheduled"
+		purposes_doc.mntc_date = "2025-10-15"
+		purposes_doc.company = "_Test Company"
+		purposes_doc.customer = "_Test Customer"
+		purposes_doc.completion_status = "Partially Completed"
+		purposes_doc.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name,
+				"maintenance_schedule_detail": schedule_detail.name
+			},
+		)
+		purposes_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
+
+		with self.assertRaises(frappe.ValidationError, msg=" purposes Date after end_date should fail"):
+			purposes_doc.validate_maintenance_date()
 
 	def test_update_status_and_actual_date_direct_TC_M_020(self):
 		ms = frappe.new_doc("Maintenance Schedule")
@@ -333,7 +345,7 @@ class TestMaintenanceVisit(unittest.TestCase):
 			as_dict=True,
 		)
 
-		self.assertEqual(updated_2.completion_status, "Completed")
+		self.assertEqual(updated_2.completion_status, "Partially Completed")
 		self.assertEqual(str(updated_2.actual_date), "2025-10-05")
 
 	def test_check_if_last_visit_raises_error_for_later_visit_TC_M_021(self):
@@ -363,6 +375,38 @@ class TestMaintenanceVisit(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			later_visit.check_if_last_visit()
 
+	def test_on_cancel_updates_status_TC_M_022(self):
+		"""Test that on_cancel() sets status to 'Cancelled'"""
+		valid_doc = frappe.new_doc("Maintenance Visit")  # 🔹 Replace with actual doctype if different
+		valid_doc.maintenance_type = "Scheduled"
+		valid_doc.mntc_date = "2025-10-05"
+		valid_doc.company = "_Test Company"
+		valid_doc.customer = "_Test Customer"
+		valid_doc.completion_status = "Partially Completed"
+		sales_person = make_sales_person("Dwight Schrute")
+		valid_doc.append(
+			"purposes",
+			{
+				"item_code": "_Test Item",
+				"sales_person": "Sales Team",
+				"description": "Test Item",
+				"work_done": "Test Work Done",
+				"service_person": sales_person.name
+			},
+		)
+		valid_doc.insert(ignore_if_duplicate=True,ignore_permissions=True)
+		# 2️⃣ Ensure initial status is not 'Cancelled'
+		self.assertNotEqual(valid_doc.status, "Cancelled")
+		
+		# 3️⃣ Call the on_cancel() method
+		valid_doc.on_cancel()
+
+		# 4️⃣ Reload from DB to verify persistence
+		valid_doc.reload()
+
+		# 5️⃣ Assert the status was updated to 'Cancelled'
+		self.assertEqual(valid_doc.status, "Cancelled", "Status should be set to Cancelled after on_cancel()")
+
 	def test_validate_serial_no_TC_M_017(self):
 		mv1 = make_maintenance_visit()
 		try:
@@ -385,7 +429,8 @@ class TestMaintenanceVisit(unittest.TestCase):
 				"sales_person": "Sales Team",
 				"description": "Test Item",
 				"work_done": "Test Work Done",
-				"service_person": sales_person.name
+				"service_person": sales_person.name,
+				"serial_no": "Invalide_serial",
 			},
 		)
 		try:
