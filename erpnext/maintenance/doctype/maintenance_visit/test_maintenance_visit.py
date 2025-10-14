@@ -527,18 +527,17 @@ def make_maintenance_visit():
 
 
 def make_sales_person(name):
-	existing_sales_person = frappe.db.exists("Sales Person", {"sales_person_name": name})
-	if existing_sales_person:
-		return frappe.get_doc("Sales Person", existing_sales_person)
+    existing_sales_person = frappe.db.get_value("Sales Person", {"sales_person_name": name}, "name")
+    if existing_sales_person:
+        return frappe.get_doc("Sales Person", existing_sales_person)
 
-	sales_person = frappe.get_doc({
-		"doctype": "Sales Person",
-		"sales_person_name": name
-	})
-	sales_person.insert(ignore_if_duplicate=True)
-	sales_person.save(ignore_permissions=True)
-	frappe.db.commit()
-	return sales_person
+    sales_person = frappe.get_doc({
+        "doctype": "Sales Person",
+        "sales_person_name": name
+    })
+    sales_person.insert(ignore_if_duplicate=True, ignore_permissions=True)
+    frappe.db.commit()
+    return sales_person
 
 def make_serial_no(item_code):
 	serial_no = frappe.get_doc({"doctype": "Serial No","item_code": item_code})
