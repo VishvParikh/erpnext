@@ -4426,13 +4426,13 @@ class TestPurchaseOrder(FrappeTestCase):
 		pr.get("items")[0].rejected_qty = 2
 		pr.insert()
 		initial_qty = frappe.db.get_value(
-        "Bin", {"item_code": "_Test Item", "warehouse": "Stores - _TC"}, "actual_qty"
-    )
+		"Bin", {"item_code": "_Test Item", "warehouse": "Stores - _TC"}, "actual_qty"
+	)
 		pr.submit()
 		sle = frappe.get_doc("Stock Ledger Entry", {
-        "voucher_no": pr.name,
-        "warehouse": "Stores - _TC"
-    })
+		"voucher_no": pr.name,
+		"warehouse": "Stores - _TC"
+	})
 		expected_qty = initial_qty + pr.get("items")[0].qty
 		self.assertEqual(sle.qty_after_transaction, expected_qty)
 		
@@ -9856,6 +9856,7 @@ def get_company_or_supplier():
 		frappe.get_doc(
 			{"doctype": "Company", "company_name": company, "abbr": "TC-5", "default_currency": "INR"}
 		).insert()
+		frappe.db.commit()
 
 	fiscal_year_doc = frappe.get_doc("Fiscal Year", fiscal_year)
 	linked_companies = {d.company for d in fiscal_year_doc.companies}
@@ -9873,6 +9874,7 @@ def get_company_or_supplier():
 				"country": "India",
 			}
 		).insert()
+		frappe.db.commit()
 
 	if not frappe.db.exists("Customer", customer):
 		frappe.get_doc(
@@ -9884,6 +9886,7 @@ def get_company_or_supplier():
 				"territory": "All Territories",
 			}
 		).insert()
+		frappe.db.commit()
 
 	return {"company": company, "supplier": supplier, "customer": customer}
 
