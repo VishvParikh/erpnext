@@ -135,7 +135,7 @@ class TestBlanketOrder(FrappeTestCase):
 		supplier = data.get("supplier")
 		item = make_test_item("_Test Item 1 for Blanket Order")
 		tax_account = create_or_get_purchase_taxes_template(company)
-
+		frappe.db.commit()
 		# 1. Create Blanket Order
 		bo_data = {
 			"doctype": "Blanket Order",
@@ -244,6 +244,7 @@ class TestBlanketOrder(FrappeTestCase):
 		supplier = data.get("supplier")
 		target_warehouse = "Stores - TC-5"
 		item = make_test_item("test_blanket_item")
+		frappe.db.commit()
 		item_price = 3000
 		qty = 3
 		blanket_order = frappe.get_doc(
