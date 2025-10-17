@@ -24,7 +24,6 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		)
 		self.default_advance_account = advance_account
 
-	@pytest.mark.unit
 	def test_validate_receivable_payable_account_company_mismatch():
 		# Setup test data
 		company_1 = "Test Company " + random_string(5)
@@ -53,8 +52,6 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 
 		assert "doesn't belong to company" in str(exc_info.value)
 
-
-	@pytest.mark.unit
 	def test_validate_receivable_payable_account_valid():
 		account = frappe.get_doc("Account", "Creditors - _TC")
 		ppr = frappe.new_doc("Process Payment Reconciliation")
@@ -66,8 +63,6 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		# Should not raise any exception
 		ppr.validate_receivable_payable_account()
 
-
-	@pytest.mark.unit
 	def test_validate_bank_cash_account_company_mismatch():
 		company_1 = "Main Co " + random_string(5)
 		company_2 = "Another Co " + random_string(5)
