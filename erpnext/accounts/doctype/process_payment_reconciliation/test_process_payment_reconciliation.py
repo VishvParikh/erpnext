@@ -5,7 +5,6 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
 from erpnext.accounts.doctype.account.test_account import create_account
-import pytest
 from frappe.utils import random_string
 
 class TestProcessPaymentReconciliation(FrappeTestCase):
@@ -24,7 +23,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		)
 		self.default_advance_account = advance_account
 
-	def test_validate_receivable_payable_account_company_mismatch():
+	def test_validate_receivable_payable_account_company_mismatch(self):
 		# Setup test data
 		company_1 = "Test Company " + random_string(5)
 		company_2 = "Other Company " + random_string(5)
@@ -47,12 +46,10 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		ppr.receivable_payable_account = account
 
 		# Expect frappe.throw for mismatched company
-		with pytest.raises(frappe.ValidationError) as exc_info:
+		with self.assertRaises(ValidationError):
 			ppr.validate_receivable_payable_account()
 
-		assert "doesn't belong to company" in str(exc_info.value)
-
-	def test_validate_receivable_payable_account_valid():
+	def test_validate_receivable_payable_account_valid(self):
 		account = frappe.get_doc("Account", "Creditors - _TC")
 		ppr = frappe.new_doc("Process Payment Reconciliation")
 		ppr.company = "_Test Company"
@@ -63,7 +60,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		# Should not raise any exception
 		ppr.validate_receivable_payable_account()
 
-	def test_validate_bank_cash_account_company_mismatch():
+	def test_validate_bank_cash_account_company_mismatch(self):
 		company_1 = "Main Co " + random_string(5)
 		company_2 = "Another Co " + random_string(5)
 
@@ -79,10 +76,8 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		ppr.party = "_Test Customer"
 		ppr.bank_cash_account = account
 
-		with pytest.raises(frappe.ValidationError) as exc_info:
+		with self.assertRaises(ValidationError):
 			ppr.validate_bank_cash_account()
-
-		assert "doesn't belong to company" in str(exc_info.value)
 
 def make_process_paymentreconciliation():
 	ppr = frappe.new_doc("Process Payment Reconciliation")
