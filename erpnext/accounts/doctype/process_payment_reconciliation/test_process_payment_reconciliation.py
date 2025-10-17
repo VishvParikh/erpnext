@@ -106,3 +106,16 @@ def make_process_paymentreconciliation():
 	ppr.insert(ignore_if_duplicate=True,ignore_permissions=True)
 
 	return ppr
+
+def create_test_account(account_name, company):
+	account = frappe.get_doc({
+		"doctype": "Account",
+		"account_name": account_name,
+		"company": company,
+		"parent_account": "Current Assets - " + company[:3],  # adjust parent if needed
+		"account_type": "Receivable",
+		"root_type": "Asset",
+		"is_group": 0,
+	})
+	account.insert(ignore_if_duplicate=True)
+	return account.name
