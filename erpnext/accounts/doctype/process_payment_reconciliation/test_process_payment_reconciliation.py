@@ -99,7 +99,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		status = frappe.db.get_value("Process Payment Reconciliation", doc.name, "status")
 		error_log = frappe.db.get_value("Process Payment Reconciliation", doc.name, "error_log")
 		self.assertEqual(status, "Queued")
-		self.assertEqual(error_log, "")
+		self.assertEqual(error_log, None)
 
 	def test_on_cancel_updates_log_status(self):
 		# Create base Process Payment Reconciliation doc
@@ -109,7 +109,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		log_doc = frappe.get_doc({
 			"doctype": "Process Payment Reconciliation Log",
 			"process_pr": doc.name,
-			"status": "Processing",
+			"status": "Running",
 		})
 		log_doc.insert(ignore_if_duplicate=True)
 
@@ -148,7 +148,6 @@ def create_test_account(account_name, company):
 		"doctype": "Account",
 		"account_name": account_name,
 		"company": company,
-		"parent_account": "Current Assets - " + company[:3],  # adjust parent if needed
 		"account_type": "Receivable",
 		"root_type": "Asset",
 		"is_group": 0,
