@@ -33,7 +33,8 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 			if not frappe.db.exists("Company", comp):
 				frappe.get_doc({
 					"doctype": "Company",
-					"company_name": comp
+					"company_name": comp,
+					"default_currency": "INR"
 				}).insert()
 
 		account = create_test_account("Receivable Account " + random_string(5), company_2)
@@ -66,7 +67,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 
 		for comp in [company_1, company_2]:
 			if not frappe.db.exists("Company", comp):
-				frappe.get_doc({"doctype": "Company", "company_name": comp}).insert()
+				frappe.get_doc({"doctype": "Company", "company_name": comp,"default_currency": "INR"}).insert()
 
 		account = create_test_account("Cash Account " + random_string(5), company_2)
 
@@ -78,6 +79,51 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 
 		with self.assertRaises(ValidationError):
 			ppr.validate_bank_cash_account()
+	
+
+	def test_before_save_clears_fields(self):
+		doc =make_process_paymentreconciliation()
+		# Call before_save
+		doc.before_save()
+		self.assertEqual(doc.status, "")
+		self.assertEqual(doc.error_log, "")
+
+	def test_on_submit_sets_status_and_error_log(self):
+		# Create and insert a dummy record
+		doc =make_process_paymentreconciliation()
+
+		# Call on_submit
+		doc.on_submit()
+
+		# Fetch from DB to confirm persisted values
+		status = frappe.db.get_value("Process Payment Reconciliation", doc.name, "status")
+		error_log = frappe.db.get_value("Process Payment Reconciliation", doc.name, "error_log")
+		self.assertEqual(status, "Queued")
+		self.assertEqual(error_log, "")
+
+	def test_on_cancel_updates_log_status(self):
+		# Create base Process Payment Reconciliation doc
+		doc =make_process_paymentreconciliation()
+
+		# Create a linked log record
+		log_doc = frappe.get_doc({
+			"doctype": "Process Payment Reconciliation Log",
+			"process_pr": doc.name,
+			"status": "Processing",
+		})
+		log_doc.insert(ignore_if_duplicate=True)
+
+		# Call on_cancel
+		doc.on_cancel()
+
+		# Assert main doc is cancelled
+		main_status = frappe.db.get_value("Process Payment Reconciliation", doc.name, "status")
+		self.assertEqual(main_status, "Cancelled")
+
+		# Assert log also cancelled
+		log_status = frappe.db.get_value("Process Payment Reconciliation Log", log_doc.name, "status")
+		self.assertEqual(log_status, "Cancelled")
+
 
 def make_process_paymentreconciliation():
 	ppr = frappe.new_doc("Process Payment Reconciliation")
