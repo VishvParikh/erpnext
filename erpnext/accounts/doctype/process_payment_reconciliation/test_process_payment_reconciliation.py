@@ -6,6 +6,7 @@ from frappe.tests.utils import FrappeTestCase
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
 from erpnext.accounts.doctype.account.test_account import create_account
 from frappe.utils import random_string
+from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance
 
 class TestProcessPaymentReconciliation(FrappeTestCase):
 	def setUp(self):
@@ -37,14 +38,21 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 					"default_currency": "INR"
 				}).insert()
 
-		account = create_test_account("Receivable Account " + random_string(5), company_2)
+		# account = create_test_account("Receivable Account " + random_string(5), company_2)
+
+		advance_account = create_account(
+			parent_account="Current Assets - _TC",
+			account_name="Advances Received",
+			company=company_2,
+			account_type="Receivable",
+		)
 
 		# Create test document
 		ppr = frappe.new_doc("Process Payment Reconciliation")
 		ppr.company = company_1
 		ppr.party_type = "Customer"
 		ppr.party = "_Test Customer"
-		ppr.receivable_payable_account = account
+		ppr.receivable_payable_account = advance_account
 
 		# Expect frappe.throw for mismatched company
 		with self.assertRaises(ValidationError):
@@ -69,13 +77,20 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 			if not frappe.db.exists("Company", comp):
 				frappe.get_doc({"doctype": "Company", "company_name": comp,"default_currency": "INR"}).insert()
 
-		account = create_test_account("Cash Account " + random_string(5), company_2)
+		# account = create_test_account("Cash Account " + random_string(5), company_2)
+
+		advance_account = create_account(
+			parent_account="Current Assets - _TC",
+			account_name="Cash Account",
+			company=company_2,
+			account_type="Receivable",
+		)
 
 		ppr = frappe.new_doc("Process Payment Reconciliation")
 		ppr.company = company_1
 		ppr.party_type = "Customer"
 		ppr.party = "_Test Customer"
-		ppr.bank_cash_account = account
+		ppr.bank_cash_account = advance_account
 
 		with self.assertRaises(ValidationError):
 			ppr.validate_bank_cash_account()
@@ -123,6 +138,46 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		# Assert log also cancelled
 		log_status = frappe.db.get_value("Process Payment Reconciliation Log", log_doc.name, "status")
 		self.assertEqual(log_status, "Cancelled")
+
+	def test_valid_docname(self):
+		"""Test when a valid docname is provided"""
+		doc =make_process_paymentreconciliation()
+		result = get_reconciled_count(doc.name)
+		self.assertIsInstance(result, dict)
+		self.assertIn("processed", result)
+		self.assertIn("total", result)
+		self.assertEqual(result["processed"], 5)
+		self.assertEqual(result["total"], 10)
+
+		invalid_result = get_reconciled_count("INVALID_DOCNAME")
+		self.assertEqual(invalid_result, {})
+
+		empty_result = get_reconciled_count()
+		self.assertEqual(empty_result, {})
+
+	def test_get_pr_instance(self):
+		"""Test that get_pr_instance copies fields correctly"""
+		doc =make_process_paymentreconciliation()
+		pr = get_pr_instance(doc.name)
+
+		# Check that Payment Reconciliation doc was created
+		self.assertEqual(pr.doctype, "Payment Reconciliation")
+
+		# Verify field values were copied properly
+		self.assertEqual(pr.company, doc.pr_doc.company)
+		self.assertEqual(pr.party_type, doc.pr_doc.party_type)
+		self.assertEqual(pr.party, doc.pr_doc.party)
+		self.assertEqual(pr.receivable_payable_account, doc.pr_doc.receivable_payable_account)
+		self.assertEqual(pr.default_advance_account, doc.pr_doc.default_advance_account)
+		self.assertEqual(pr.from_invoice_date, doc.pr_doc.from_invoice_date)
+		self.assertEqual(pr.to_invoice_date, doc.pr_doc.to_invoice_date)
+		self.assertEqual(pr.from_payment_date, doc.pr_doc.from_payment_date)
+		self.assertEqual(pr.to_payment_date, doc.pr_doc.to_payment_date)
+
+		# Verify default values
+		self.assertEqual(pr.invoice_limit, 1000)
+		self.assertEqual(pr.payment_limit, 1000)
+
 
 
 def make_process_paymentreconciliation():
