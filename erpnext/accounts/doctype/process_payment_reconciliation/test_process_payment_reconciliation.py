@@ -7,7 +7,7 @@ from unittest.mock import patch
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
 from erpnext.accounts.doctype.account.test_account import create_account
 from frappe.utils import random_string
-from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance,trigger_job_for_doc,pause_job_for_doc
+from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance,trigger_job_for_doc,pause_job_for_doc,get_next_allocation,fetch_and_allocate
 
 class TestProcessPaymentReconciliation(FrappeTestCase):
 	def setUp(self):
@@ -56,7 +56,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		ppr.receivable_payable_account = advance_account
 
 		# Expect frappe.throw for mismatched company
-		with self.assertRaises(ValidationError):
+		with self.assertRaises(frappe.exceptions.ValidationError):
 			ppr.validate_receivable_payable_account()
 
 	def test_validate_receivable_payable_account_valid(self):
@@ -93,7 +93,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		ppr.party = "_Test Customer"
 		ppr.bank_cash_account = advance_account
 
-		with self.assertRaises(ValidationError):
+		with self.assertRaises(frappe.exceptions.ValidationError):
 			ppr.validate_bank_cash_account()
 	
 
@@ -144,6 +144,14 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		"""Test when a valid docname is provided"""
 		doc =make_process_paymentreconciliation()
 		result = get_reconciled_count(doc.name)
+		reconcile_log = frappe.get_doc({
+			"doctype": "Process Payment Reconciliation Log",
+			"process_pr": doc.name,
+			"status": "Running",
+			"reconciled_entries": 5,
+			"total_allocations": 10,
+		})
+		reconcile_log.insert(ignore_if_duplicate=True)
 		self.assertIsInstance(result, dict)
 		self.assertEqual(result["processed"], 5)
 		self.assertEqual(result["total"], 10)
@@ -236,6 +244,153 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 
 		pause_job_for_doc(None)
 		self.assertTrue(True)
+	
+	def test_returns_empty_list_when_log_is_none(self):
+		"""If log is None, should return empty list"""
+		result = get_next_allocation(None)
+		self.assertEqual(result, [])
+
+	@patch("erpnext.accounts.frappe.db.get_all")
+	def test_returns_empty_list_when_no_unreconciled_records(self, mock_get_all):
+		"""If no unreconciled allocations exist, return empty list"""
+		mock_get_all.return_value = []  # No next allocation
+		result = get_next_allocation("LOG-001")
+		self.assertEqual(result, [])
+		mock_get_all.assert_called_once()  # Only the first query runs
+	
+	@patch("erpnext.accounts.frappe.db.get_all")
+	def test_returns_allocations_for_next_reference(self, mock_get_all):
+		"""Should return list of allocations matching first unreconciled record"""
+		# First call (to get the 'next' allocation)
+		doc = make_process_paymentreconciliation()
+		first_unreconciled = [{
+			"reference_type": "Process Payment Reconciliation",
+			"reference_name": doc.name
+		}]
+
+		# Second call (to get all allocations with same ref)
+		all_allocations = [
+			{
+				"name": "ALLOC-001",
+				"parent": "LOG-001",
+				"reference_type": "Process Payment Reconciliation",
+				"reference_name": doc.name,
+				"reconciled": 0,
+				"idx": 1,
+			},
+			{
+				"name": "ALLOC-002",
+				"parent": "LOG-001",
+				"reference_type": "Process Payment Reconciliation",
+				"reference_name": doc.name,
+				"reconciled": 0,
+				"idx": 2,
+			},
+		]
+
+		# Simulate two sequential calls to frappe.db.get_all
+		mock_get_all.side_effect = [first_unreconciled, all_allocations]
+
+		result = get_next_allocation("LOG-001")
+
+		# Verify both DB calls
+		self.assertEqual(mock_get_all.call_count, 2)
+		self.assertEqual(result, all_allocations)
+
+		# Ensure correct query order and filters
+		first_call_args = mock_get_all.call_args_list[0][1]
+		second_call_args = mock_get_all.call_args_list[1][1]
+
+		self.assertIn("filters", first_call_args)
+		self.assertIn("filters", second_call_args)
+		self.assertEqual(second_call_args["filters"]["reference_name"], doc.name)
+
+	@patch("erpnext.accounts.get_pr_instance")
+	@patch("erpnext.accounts.frappe.get_doc")
+	@patch("erpnext.accounts.frappe.db.get_value")
+	@patch("erpnext.accounts.get_next_allocation")
+	@patch("erpnext.accounts.is_job_running")
+	@patch("erpnext.accounts.frappe.enqueue")
+	def test_fetch_and_allocate_success(
+		self,
+		mock_enqueue,
+		mock_is_job_running,
+		mock_get_next_allocation,
+		mock_get_value,
+		mock_get_doc,
+		mock_get_pr_instance,
+	):
+		"""Should fetch data, create allocations, and enqueue reconciliation job"""
+		doc = make_process_paymentreconciliation()
+		docname = doc.name
+		log_name = "LOG-001"
+
+		# --- Mock frappe.db.get_value ---
+		def get_value_side_effect(doctype, *args, **kwargs):
+			if doctype == "Process Payment Reconciliation Log":
+				if kwargs.get("filters"):
+					return log_name  # log exists for doc
+				if args and args[0] == log_name and args[1] == "allocated":
+					return False  # Not yet allocated
+			return None
+
+		mock_get_value.side_effect = get_value_side_effect
+
+		# --- Mock reconcile_log (Frappe Doc) ---
+		reconcile_log = MagicMock()
+		reconcile_log.name = log_name
+		reconcile_log.get.return_value = []
+		mock_get_doc.return_value = reconcile_log
+
+		# --- Mock PR instance ---
+		pr_mock = MagicMock()
+		pr_mock.invoices = [MagicMock(), MagicMock()]
+		pr_mock.payments = [MagicMock()]
+		pr_mock.allocate_entries = MagicMock()
+		pr_mock.get.return_value = [MagicMock()]
+		mock_get_pr_instance.return_value = pr_mock
+
+		# --- Mock get_next_allocation ---
+		mock_get_next_allocation.return_value = [
+			frappe._dict({"idx": 1}),
+			frappe._dict({"idx": 2}),
+		]
+
+		# --- Mock job running & enqueue ---
+		mock_is_job_running.return_value = False
+
+		# --- Call the function ---
+		fetch_and_allocate(docname)
+
+		# --- Assertions ---
+		# Ensures allocation data fetched
+		mock_get_pr_instance.assert_called_once_with(docname)
+		pr_mock.get_unreconciled_entries.assert_called_once()
+
+		# Allocations appended and saved
+		self.assertTrue(reconcile_log.save.called)
+		self.assertEqual(reconcile_log.allocated, True)
+		self.assertIsInstance(reconcile_log.total_allocations, int)
+
+		# Job enqueue verification
+		mock_enqueue.assert_called_once()
+		args, kwargs = mock_enqueue.call_args
+		self.assertIn("method", kwargs)
+		self.assertIn("job_name", kwargs)
+		self.assertTrue(kwargs["job_name"].startswith(f"process_{docname}_reconcile_allocation_"))
+	
+	@patch("erpnext.accounts.frappe.db.get_value")
+	def test_fetch_and_allocate_with_no_log(self, mock_get_value):
+		"""Should return gracefully when no log exists"""
+		mock_get_value.return_value = None
+		fetch_and_allocate("PR-001")
+		mock_get_value.assert_called()
+	
+	@patch("erpnext.accounts.frappe.db.get_value")
+	def test_fetch_and_allocate_with_no_doc(self, mock_get_value):
+		"""Should return without errors when docname is None"""
+		fetch_and_allocate(None)
+		mock_get_value.assert_not_called()
 
 def make_process_paymentreconciliation():
 	ppr = frappe.new_doc("Process Payment Reconciliation")
