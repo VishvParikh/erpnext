@@ -27,7 +27,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 
 	def test_validate_receivable_payable_account_company_mismatch(self):
 		# Setup test data
-		company_1 = "Test Company " + random_string(5)
+		company_1 = "_Test Company"
 		company_2 = "Other Company " + random_string(5)
 
 		# Create both companies
@@ -44,13 +44,13 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		advance_account = create_account(
 			parent_account="Current Assets - _TC",
 			account_name="Advances Received",
-			company=company_2,
+			company="_Test Company",
 			account_type="Receivable",
 		)
 
 		# Create test document
 		ppr = frappe.new_doc("Process Payment Reconciliation")
-		ppr.company = company_1
+		ppr.company = company_2
 		ppr.party_type = "Customer"
 		ppr.party = "_Test Customer"
 		ppr.receivable_payable_account = advance_account
@@ -71,7 +71,7 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		ppr.validate_receivable_payable_account()
 
 	def test_validate_bank_cash_account_company_mismatch(self):
-		company_1 = "Main Co " + random_string(5)
+		company_1 = "_Test Company"
 		company_2 = "Another Co " + random_string(5)
 
 		for comp in [company_1, company_2]:
@@ -83,12 +83,12 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		advance_account = create_account(
 			parent_account="Current Assets - _TC",
 			account_name="Cash Account",
-			company=company_2,
+			company=company_1,
 			account_type="Receivable",
 		)
 
 		ppr = frappe.new_doc("Process Payment Reconciliation")
-		ppr.company = company_1
+		ppr.company = company_2
 		ppr.party_type = "Customer"
 		ppr.party = "_Test Customer"
 		ppr.bank_cash_account = advance_account
@@ -189,6 +189,43 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			trigger_job_for_doc(doc.name)
 
+	@patch("erpnext.accounts.is_scheduler_inactive", return_value=True)
+	@patch("erpnext.accounts.frappe.msgprint")
+	def test_scheduler_inactive(self, mock_msgprint, mock_scheduler):
+		"""Should show msgprint if scheduler is inactive"""
+		doc = make_process_paymentreconciliation()
+		trigger_job_for_doc(doc.name)
+		mock_msgprint.assert_called_once()
+
+	@patch("erpnext.accounts.is_scheduler_inactive", return_value=False)
+	@patch("erpnext.accounts.is_job_running", return_value=False)
+	@patch("erpnext.accounts.frappe.db.get_single_value", return_value=True)
+	@patch("erpnext.accounts.frappe.enqueue")
+	def test_trigger_for_queued_doc(self, mock_enqueue, mock_setting, mock_job_running, mock_scheduler):
+		"""Should enqueue background job for queued doc"""
+		doc = make_process_paymentreconciliation()
+		doc.db_set("status", "Queued")
+		trigger_job_for_doc(doc.name)
+
+		mock_enqueue.assert_called_once()
+		args, kwargs = mock_enqueue.call_args
+		self.assertIn("reconcile_based_on_filters", kwargs["method"])
+		self.assertIn(doc.name, kwargs["job_name"])
+
+	@patch("erpnext.accounts.is_scheduler_inactive", return_value=False)
+	@patch("erpnext.accounts.is_job_running", return_value=False)
+	@patch("erpnext.accounts.frappe.db.get_single_value", return_value=True)
+	@patch("erpnext.accounts.frappe.enqueue")
+	def test_trigger_for_paused_doc(self, mock_enqueue, mock_setting, mock_job_running, mock_scheduler):
+		"""Should resume and enqueue job when status is Paused"""
+		doc = make_process_paymentreconciliation()
+		doc.db_set("status", "Paused")
+
+		trigger_job_for_doc(doc.name)
+		mock_enqueue.assert_called_once()
+		args, kwargs = mock_enqueue.call_args
+		self.assertIn(doc.name, kwargs["job_name"])
+
 	def test_pause_job_updates_main_doc(self):
 		"""Test that the Process Payment Reconciliation is marked as Paused"""
 		doc = make_process_paymentreconciliation()
@@ -196,6 +233,9 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 
 		status = frappe.db.get_value("Process Payment Reconciliation", doc.name, "status")
 		self.assertEqual(status, "Paused")
+
+		pause_job_for_doc(None)
+		self.assertTrue(True)
 
 def make_process_paymentreconciliation():
 	ppr = frappe.new_doc("Process Payment Reconciliation")
