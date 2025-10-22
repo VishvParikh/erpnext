@@ -3,10 +3,11 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from unittest.mock import patch
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
 from erpnext.accounts.doctype.account.test_account import create_account
 from frappe.utils import random_string
-from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance,trigger_job_for_doc
+from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance,trigger_job_for_doc,pause_job_for_doc
 
 class TestProcessPaymentReconciliation(FrappeTestCase):
 	def setUp(self):
@@ -187,6 +188,14 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		doc = make_process_paymentreconciliation()
 		with self.assertRaises(frappe.ValidationError):
 			trigger_job_for_doc(doc.name)
+
+	def test_pause_job_updates_main_doc(self):
+		"""Test that the Process Payment Reconciliation is marked as Paused"""
+		doc = make_process_paymentreconciliation()
+		pause_job_for_doc(doc.name)
+
+		status = frappe.db.get_value("Process Payment Reconciliation", doc.name, "status")
+		self.assertEqual(status, "Paused")
 
 def make_process_paymentreconciliation():
 	ppr = frappe.new_doc("Process Payment Reconciliation")
