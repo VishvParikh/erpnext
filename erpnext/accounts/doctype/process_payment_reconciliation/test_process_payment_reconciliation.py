@@ -6,7 +6,7 @@ from frappe.tests.utils import FrappeTestCase
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
 from erpnext.accounts.doctype.account.test_account import create_account
 from frappe.utils import random_string
-from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance
+from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance,trigger_job_for_doc
 
 class TestProcessPaymentReconciliation(FrappeTestCase):
 	def setUp(self):
@@ -144,8 +144,6 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		doc =make_process_paymentreconciliation()
 		result = get_reconciled_count(doc.name)
 		self.assertIsInstance(result, dict)
-		self.assertIn("processed", result)
-		self.assertIn("total", result)
 		self.assertEqual(result["processed"], 5)
 		self.assertEqual(result["total"], 10)
 
@@ -164,21 +162,31 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		self.assertEqual(pr.doctype, "Payment Reconciliation")
 
 		# Verify field values were copied properly
-		self.assertEqual(pr.company, doc.pr_doc.company)
-		self.assertEqual(pr.party_type, doc.pr_doc.party_type)
-		self.assertEqual(pr.party, doc.pr_doc.party)
-		self.assertEqual(pr.receivable_payable_account, doc.pr_doc.receivable_payable_account)
-		self.assertEqual(pr.default_advance_account, doc.pr_doc.default_advance_account)
-		self.assertEqual(pr.from_invoice_date, doc.pr_doc.from_invoice_date)
-		self.assertEqual(pr.to_invoice_date, doc.pr_doc.to_invoice_date)
-		self.assertEqual(pr.from_payment_date, doc.pr_doc.from_payment_date)
-		self.assertEqual(pr.to_payment_date, doc.pr_doc.to_payment_date)
+		self.assertEqual(pr.company, doc.company)
+		self.assertEqual(pr.party_type, doc.party_type)
+		self.assertEqual(pr.party, doc.party)
+		self.assertEqual(pr.receivable_payable_account, doc.receivable_payable_account)
+		self.assertEqual(pr.default_advance_account, doc.default_advance_account)
+		self.assertEqual(pr.from_invoice_date, doc.from_invoice_date)
+		self.assertEqual(pr.to_invoice_date, doc.to_invoice_date)
+		self.assertEqual(pr.from_payment_date, doc.from_payment_date)
+		self.assertEqual(pr.to_payment_date, doc.to_payment_date)
 
 		# Verify default values
 		self.assertEqual(pr.invoice_limit, 1000)
 		self.assertEqual(pr.payment_limit, 1000)
 
+	def test_no_docname(self):
+		"""Should do nothing if no docname is provided"""
+		result = trigger_job_for_doc(None)
+		self.assertIsNone(result)
 
+	@patch("erpnext.accounts.frappe.db.get_single_value", return_value=False)
+	def test_auto_reconcile_disabled(self, mock_setting):
+		"""Should throw if auto reconciliation is disabled"""
+		doc = make_process_paymentreconciliation()
+		with self.assertRaises(frappe.ValidationError):
+			trigger_job_for_doc(doc.name)
 
 def make_process_paymentreconciliation():
 	ppr = frappe.new_doc("Process Payment Reconciliation")
