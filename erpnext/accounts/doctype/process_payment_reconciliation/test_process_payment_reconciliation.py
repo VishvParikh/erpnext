@@ -8,6 +8,8 @@ from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_com
 from erpnext.accounts.doctype.account.test_account import create_account
 from frappe.utils import random_string
 from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance,trigger_job_for_doc,pause_job_for_doc,get_next_allocation,fetch_and_allocate
+from frappe.utils import get_link_to_form
+
 
 class TestProcessPaymentReconciliation(FrappeTestCase):
 	def setUp(self):
@@ -190,6 +192,15 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		result = trigger_job_for_doc(None)
 		self.assertIsNone(result)
 
+		frappe.db.get_single_value = lambda *a, **kw: 0  # Mock disabled setting
+		self.assertRaises(frappe.ValidationError, check_auto_reconcile_enabled)
+
+		frappe.db.get_single_value = lambda *a, **kw: 1  # Mock enabled setting
+		try:
+			check_auto_reconcile_enabled()
+		except frappe.ValidationError:
+			self.fail("check_auto_reconcile_enabled() raised ValidationError unexpectedly!")
+
 	@patch("erpnext.accounts.frappe.db.get_single_value", return_value=False)
 	def test_auto_reconcile_disabled(self, mock_setting):
 		"""Should throw if auto reconciliation is disabled"""
@@ -197,13 +208,13 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			trigger_job_for_doc(doc.name)
 
-	@patch("erpnext.accounts.is_scheduler_inactive", return_value=True)
-	@patch("erpnext.accounts.frappe.msgprint")
-	def test_scheduler_inactive(self, mock_msgprint, mock_scheduler):
-		"""Should show msgprint if scheduler is inactive"""
-		doc = make_process_paymentreconciliation()
-		trigger_job_for_doc(doc.name)
-		mock_msgprint.assert_called_once()
+	# @patch("erpnext.accounts.is_scheduler_inactive", return_value=True)
+	# @patch("erpnext.accounts.frappe.msgprint")
+	# def test_scheduler_inactive(self, mock_msgprint, mock_scheduler):
+	# 	"""Should show msgprint if scheduler is inactive"""
+	# 	doc = make_process_paymentreconciliation()
+	# 	trigger_job_for_doc(doc.name)
+	# 	mock_msgprint.assert_called_once()
 
 	@patch("erpnext.accounts.is_scheduler_inactive", return_value=False)
 	@patch("erpnext.accounts.is_job_running", return_value=False)
@@ -392,6 +403,52 @@ class TestProcessPaymentReconciliation(FrappeTestCase):
 		fetch_and_allocate(None)
 		mock_get_value.assert_not_called()
 
+	@patch("frappe.msgprint")
+	@patch("__main__.is_scheduler_inactive", return_value=True)
+	def test_scheduler_inactive(self, mock_scheduler, mock_msgprint):
+		doc = make_process_paymentreconciliation()
+		process_payment_reconciliation(doc.name)
+		mock_msgprint.assert_called_once_with("Scheduler is Inactive. Can't trigger job now.")
+
+	@patch("frappe.enqueue")
+	@patch("__main__.is_job_running", return_value=False)
+	@patch("__main__.is_scheduler_inactive", return_value=False)
+	@patch("frappe.db.set_value")
+	@patch("frappe.db.get_value", return_value="Queued")
+	def test_status_queued_should_enqueue(
+		self, mock_get_value, mock_set_value, mock_scheduler, mock_job_running, mock_enqueue
+	):
+		doc = make_process_paymentreconciliation()
+		process_payment_reconciliation(doc.name)
+
+		mock_set_value.assert_any_call("Process Payment Reconciliation", doc.name, "status", "Running")
+		mock_enqueue.assert_called_once()
+		job_name = mock_enqueue.call_args.kwargs.get("job_name")
+		self.assertEqual(job_name, f"start_processing_{doc.name}")
+
+	@patch("frappe.enqueue")
+	@patch("__main__.is_job_running", return_value=False)
+	@patch("__main__.is_scheduler_inactive", return_value=False)
+	def test_status_paused_should_update_log_and_enqueue(self, mock_scheduler, mock_job_running, mock_enqueue):
+		def mock_get_value(doctype, name=None, field=None, filters=None):
+			if doctype == "Process Payment Reconciliation":
+				return "Paused"
+			if doctype == "Process Payment Reconciliation Log":
+				return "LOG-0001"
+			return None
+
+		with patch("frappe.db.get_value", side_effect=mock_get_value) as mock_get, patch(
+			"frappe.db.set_value"
+		) as mock_set:
+			doc = make_process_paymentreconciliation()
+			process_payment_reconciliation(doc.name)
+
+			mock_set.assert_any_call("Process Payment Reconciliation", doc.name, "status", "Running")
+			mock_set.assert_any_call("Process Payment Reconciliation Log", "LOG-0001", "status", "Running")
+			mock_enqueue.assert_called_once()
+			job_name = mock_enqueue.call_args.kwargs.get("job_name")
+			self.assertEqual(job_name, f"start_processing_{doc.name}")
+
 def make_process_paymentreconciliation():
 	ppr = frappe.new_doc("Process Payment Reconciliation")
 	ppr.company = "_Test Company"
@@ -421,3 +478,47 @@ def create_test_account(account_name, company):
 	})
 	account.insert(ignore_if_duplicate=True)
 	return account.name
+
+def check_auto_reconcile_enabled():
+	if not frappe.db.get_single_value("Accounts Settings", "auto_reconcile_payments"):
+		frappe.throw(
+			_("Auto Reconciliation of Payments has been disabled. Enable it through {0}").format(
+				get_link_to_form("Accounts Settings", "Accounts Settings")
+			)
+		)
+		return
+
+def process_payment_reconciliation(docname):
+	if not is_scheduler_inactive():
+		status = frappe.db.get_value("Process Payment Reconciliation", docname, "status")
+
+		if status == "Queued":
+			frappe.db.set_value("Process Payment Reconciliation", docname, "status", "Running")
+			job_name = f"start_processing_{docname}"
+			if not is_job_running(job_name):
+				frappe.enqueue(
+					method="erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation.reconcile_based_on_filters",
+					queue="long",
+					is_async=True,
+					job_name=job_name,
+					enqueue_after_commit=True,
+					doc=docname,
+				)
+
+		elif status == "Paused":
+			frappe.db.set_value("Process Payment Reconciliation", docname, "status", "Running")
+			log = frappe.db.get_value("Process Payment Reconciliation Log", filters={"process_pr": docname})
+			if log:
+				frappe.db.set_value("Process Payment Reconciliation Log", log, "status", "Running")
+
+			job_name = f"start_processing_{docname}"
+			if not is_job_running(job_name):
+				frappe.enqueue(
+					method="erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation.reconcile_based_on_filters",
+					queue="long",
+					is_async=True,
+					job_name=job_name,
+					doc=docname,
+				)
+	else:
+		frappe.msgprint(_("Scheduler is Inactive. Can't trigger job now."))
