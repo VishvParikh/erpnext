@@ -9,6 +9,7 @@ from erpnext.accounts.doctype.account.test_account import create_account
 from frappe.utils import random_string
 from erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation import get_reconciled_count,get_pr_instance,trigger_job_for_doc,pause_job_for_doc,get_next_allocation,fetch_and_allocate
 from frappe.utils import get_link_to_form
+from frappe.utils.scheduler import is_scheduler_inactive
 
 
 class TestProcessPaymentReconciliation(FrappeTestCase):
