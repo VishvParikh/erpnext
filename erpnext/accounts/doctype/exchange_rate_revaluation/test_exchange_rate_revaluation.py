@@ -821,7 +821,7 @@ class TestExchangeRateRevaluation(AccountsTestMixin, FrappeTestCase):
 		self.assertEqual(accounts_data, [])
 
 	def test_calculate_exchange_rate_using_last_gle_TC_ACC_382(self):
-		from erpnext.accounts.utils import calculate_exchange_rate_using_last_gle
+		from erpnext.accounts.doctype.exchange_rate_revaluation.exchange_rate_revaluation import calculate_exchange_rate_using_last_gle
 
 		existing = frappe.db.exists("GL Entry", {"voucher_no": "TEST-JE-001"})
 		if existing:
