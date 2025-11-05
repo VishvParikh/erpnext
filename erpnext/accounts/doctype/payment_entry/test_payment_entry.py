@@ -3501,7 +3501,8 @@ def make_test_item(item_name=None):
 	from erpnext.stock.doctype.item.test_item import make_item
 
 	app_name = "india_compliance"
-	if not frappe.db.exists("Item", item_name or "Test Item with Tax"):
+	item_name = item_name or "Test Item with Tax"
+	if not frappe.db.exists("Item", item_name):
 		if app_name in frappe.get_installed_apps():
 			if not frappe.db.exists("GST HSN Code", "888890"):
 				frappe.get_doc(
@@ -3509,13 +3510,13 @@ def make_test_item(item_name=None):
 				).insert(ignore_permissions=True)
 
 			item = make_item(
-				item_name or "Test Item with Tax",
+				item_name,
 				{
 					"is_stock_item": 1,
 					"gst_hsn_code": "888890",
 				},
 			)
-
+			frappe.db.commit()
 			return item
 
 		else:
@@ -3525,7 +3526,7 @@ def make_test_item(item_name=None):
 					"is_stock_item": 1,
 				},
 			)
-
+			frappe.db.commit()
 			return item
 	else:
 		if app_name in frappe.get_installed_apps():
@@ -3533,7 +3534,7 @@ def make_test_item(item_name=None):
 				frappe.get_doc(
 					{"doctype": "GST HSN Code", "hsn_code": "888890", "description": "test"}
 				).insert()
-			item = frappe.get_doc("Item", item_name or "Test Item with Tax")
+			item = frappe.get_doc("Item", item_name)
 			if not item.gst_hsn_code:
 				item.gst_hsn_code = "888890"
 				item.save()
