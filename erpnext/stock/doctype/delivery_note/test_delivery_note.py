@@ -3322,12 +3322,20 @@ class TestDeliveryNote(FrappeTestCase):
 
 	def test_delivery_note_with_serialized_item_TC_SCK_144(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.stock.doctype.item.test_item import make_item
 
 		warehouse = "_Test Warehouse - _TC"
 
 		item_code = "_Test Item2"
 		#item = make_test_item(item_code)
-		item = make_test_item(item_name = "_Test Item2")
+		#item = make_test_item(item_name = "_Test Item2")
+		item = make_item(
+				 "_Test Item2",
+				{
+					"is_stock_item": 1,
+					"gst_hsn_code": "888890",
+				},
+			)
 		item.has_serial_no = 1
 		item.serial_no_series = "ASD.##"
 		item.save()
